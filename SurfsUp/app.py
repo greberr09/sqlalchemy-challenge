@@ -5,6 +5,7 @@
 # Flask and numpy
 from flask import Flask, jsonify
 import numpy as np
+import datetime as dt
 
 # path for the db files
 import os
@@ -71,8 +72,8 @@ def home():
             f"/api/v1.0/precipitation<br/>"
             f"/api/v1.0/stations<br/>"
             f"/api/v1.0/tobs<br/>"
-            f"/api/v1.0/<start><br/>"
-            f"/api/v1.0/<start><end><br/>"
+            f"/api/v1.0/start/<start><br/>"
+            f"/api/v1.0/start_end/<start>/<end><br/>"
         )
 
 ######################################################################
@@ -171,16 +172,10 @@ def get_temps():
   
     #precip_list = list(np.ravel(results))
 
-    active_station_temps= [{'date': result[0], 'precipitation': result[1]} for result in results]
+    active_station_temps= [{'date': result[0], 'temperature': result[1]} for result in results]
 
 
     # Return the JSON representation of the dictionary.
-
-    return jsonify(active_station_temps)
-
-    active_station_temps = [{'date': result[0], 'temperature': result[1]} for result in results]
-
-    #Return a JSON list of temperature observations for the previous year.
 
     return jsonify(active_station_temps)
 
@@ -192,9 +187,31 @@ def get_temps():
 #
 ################################################################
 
-@app.route("/api/v1.0/start")
-def get_temps_start(start='2016-08-23'):
-    return "Start temp: {start}"
+@app.route("/api/v1.0/start/<start>")
+def get_temps_start(start ='2016-08-23'):
+
+     # Create session (link) from Python to the hawaii database
+    session = Session(engine)
+
+    # Query the dates and temperature observations of the most-active station for the previous year
+    
+    results= session.query(measurement.date, measurement.prcp).\
+                    filter(measurement.date >= start).\
+                    order_by(measurement.date).all()
+
+    session.close()
+
+    # Convert the query results from the temperature observations to a dictionary 
+    # so json user has the field names available to query, not just the data.
+  
+    #precip_list = list(np.ravel(results))
+
+    start_dates = [{'date': result[0], 'precipitation': result[1]} for result in results]
+
+    # Return the JSON representation of the dictionary.
+
+    return jsonify(start_dates)
+
 
 #####################################################################
 # Temperatures with user-entered  start and stop dates
@@ -202,42 +219,78 @@ def get_temps_start(start='2016-08-23'):
 # define what to do when a user hits the /api/v1.0/<start><end> route
 #
 #####################################################################
+    #Return a JSON list of the minimum temperature, the average temperature, and the 
+    #maximum temperature for a specified start or start-end range.
 
-@app.route("/api/v1.0/start-end")
-def get_temp_range(start='2016-08-23', end='2017-08-23'):
-    # Route logic
+    #For a specified start, calculate TMIN, TAVG, and TMAX for all the dates greater than 
+    # or equal to the start date.
+
+    #For a specified start date and end date, calculate TMIN, TAVG, and TMAX for the 
+    # dates from the start date to the end date, inclusive.
+
+
+    #Return a JSON list of the minimum temperature, the average temperature, and the 
+    #maximum temperature for a specified start or start-end range.
+
+    #For a specified start, calculate TMIN, TAVG, and TMAX for all the dates greater than 
+    # or equal to the start date.
+
+    #For a specified start date and end date, calculate TMIN, TAVG, and TMAX for the 
+    # dates from the start date to the end date, inclusive.
+
+
+@app.route("/api/v1.0/start_end/<start>/<end>")
+def get_temp_range(start, end):
+
+    # Create session (link) from Python to the hawaii database
+    session = Session(engine)
+
+    # Query the dates and temperature observations of the most-active station for the previous year
+    
+    results= session.query(measurement.date, measurement.prcp).\
+                    filter(and_(measurement.date >= start,
+                                measurement.date <= end)).\
+                    order_by(measurement.date).all()
+
+    session.close()
+
+    # Convert the query results from the temperature observations to a dictionary 
+    # so json user has the field names available to query, not just the data.
+  
+    #precip_list = list(np.ravel(results))
+
+    start_end_dates = [{'date': result[0], 'precipitation': result[1]} for result in results]
+
+    # Return the JSON representation of the dictionary.
+
+    return jsonify(start_end_dates)
+
+###############################################
+##def to_date(date_string): 
+    #try:
+        #return datetime.datetime.strptime(date_string, "%Y-%m-%d").date()
+    #except ValueError:
+       # raise ValueError('{} is not valid date in the format YYYY-MM-DD'.format(date_string))
+
+#@app.route()
+#def event():
+    #try:
+    #    ektempo = to_date(request.args.get('start', default = datetime.date.today().isoformat()))
+    #except ValueError as ex:
+       # return jsonify({'error': str(ex)}), 400   # jsonify, if this is a json api
+
+# Use of <converter: variable name> in the
+# route() decorator.
+#@app.route('/allow/<int:Number>')
+#def allow(Number):
+   # if Number < 25:
+    #    return f'You have been allowed to enter because your number is {str(Number)}'
+    #else:
+    #   return f'You are not allowed'
  
 
-    #Return a JSON list of the minimum temperature, the average temperature, and the 
-    #maximum temperature for a specified start or start-end range.
-
-    #For a specified start, calculate TMIN, TAVG, and TMAX for all the dates greater than 
-    # or equal to the start date.
-
-    #For a specified start date and end date, calculate TMIN, TAVG, and TMAX for the 
-    # dates from the start date to the end date, inclusive.
-
-
-    #Return a JSON list of the minimum temperature, the average temperature, and the 
-    #maximum temperature for a specified start or start-end range.
-
-    #For a specified start, calculate TMIN, TAVG, and TMAX for all the dates greater than 
-    # or equal to the start date.
-
-    #For a specified start date and end date, calculate TMIN, TAVG, and TMAX for the 
-    # dates from the start date to the end date, inclusive.
-
-
-
-    # hints
-    # Join the station and measurement tables for some of the queries.
-
-    # Use the Flask jsonify function to convert your API data to a valid JSON response object.
-
-    return f"Start: {start}, End: {end}"
-
 ###################################################
-# Main processing
+# Main driver function:  call flask run() on local server
 ##################################################
 
 if __name__ == "__main__":
