@@ -5,7 +5,7 @@
 # Flask and numpy
 from flask import Flask, jsonify
 import numpy as np
-import datetime as dt
+import datetime 
 
 # path for the db files
 import os
@@ -51,6 +51,15 @@ most_active_station = 'USC00519281'
 last_precip_date = '2017-08-23'
 prior_year_date = '2016-08-23'
 
+###############################################
+# Functino to check validity of user input dates
+################################################
+
+def string_to_date(date_str): 
+    try:
+        return datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        raise ValueError(f"Date '{date_str}' is not a valid date in the format 'yyyy-mm-dd'")
 
 #################################################
 # Flask Routes  
@@ -67,13 +76,18 @@ prior_year_date = '2016-08-23'
 @app.route("/")
 def home():
         return (
-            f"Welcome to the Weather Stations API<br/>"
-            f"Available Routes:<br/>"
+            f"Welcome to the Weather Stations API<br/><br/>"
+            f"Available Routes:<br/><br/>"
             f"/api/v1.0/precipitation<br/>"
             f"/api/v1.0/stations<br/>"
             f"/api/v1.0/tobs<br/>"
-            f"/api/v1.0/start/<start><br/>"
-            f"/api/v1.0/start_end/<start>/<end><br/>"
+            f"/api/v1.0/<start><br/>"
+            f"/api/v1.0/<start>/<end><br/><br/>"            
+            f"For the stats queries, the start date and optional "
+            f"end date should be entered in the format yyyy-mm-dd "
+            f"and appended after the URL.<br/>  Examples: <br/>"
+            f"Stats for a given start date to the last date in the database:  /api/v1.0/2016-01-01<br/>" 
+            F"Stats for all dates within an (inclusive) begin-end range: /api/v1.0/2017-01-01/2017-02-28<br/>"         
         )
 
 ######################################################################
@@ -112,10 +126,18 @@ def precipitation():
   
     #precip_list = list(np.ravel(results))
 
-    precip_dict = [{'date': result[0], 'precipitation': result[1]} for result in results]
-
+    if results:
+        precip_dict = [{'date': result[0], 'precipitation': result[1]} for result in results]
+    else:
+         return jsonify("No results found", 404)
    
     # Return the JSON representation of the dictionary.
+
+    # The fields will not necessarily be returned in the order 
+    # they were added to the dictionary.  Jsonify does not
+    # provide a way to order the returned fields and the 
+    # specification does not require a particular default order.
+    # Different implementations also may return the fields in different orders.
 
     return jsonify(precip_dict)
 
@@ -140,9 +162,14 @@ def get_stations():
     # Create a stations dictionary so the end user of the json 
     # has the field names to work with, not just the data.
 
-    stations_list = [{'station': result[0], 'name': result[1], 'latitude': result[2], 'longitude': result[3], 'elevation': result[4]} for result in results]
-   
-    # Return a JSON list of stations 
+    if results:
+        stations_list = [{'station': result[0], 'name': result[1], 'latitude': result[2], 'longitude': result[3], 'elevation': result[4]} for result in results]
+    else:
+        return jsonify('no results found', 404)
+    
+    # Return a JSON list of stations.  The fields will not
+    # necessarily be returned in the order added or in any particular order.
+
     return jsonify(stations_list)
 
 ##########################################################
@@ -170,51 +197,72 @@ def get_temps():
     # Convert the query results from the temperature observations to a dictionary 
     # so json user has the field names available to query, not just the data.
   
-    #precip_list = list(np.ravel(results))
+    if results:
+         active_station_temps= [{'date': result[0], 'temperature': result[1]} for result in results]
+    else:
+        return jsonify('no results found', 404)
 
-    active_station_temps= [{'date': result[0], 'temperature': result[1]} for result in results]
-
-
-    # Return the JSON representation of the dictionary.
+    # Return the JSON representation of the dictionary.   Jsonify 
+    # does not provide the fields in any partiular order.
 
     return jsonify(active_station_temps)
 
 
 ################################################################
-# Temperatures with user-entered start or start-stop dates
-# /api/v1.0/<start> and /api/v1.0/<start>/<end>
-# Define what to do when a user hits the /api/v1.0/<start> route
-#
+# Temperature calcs with user-entered start or start-stop dates
+#  /api/v1.0/<start> and /api/v1.0/<start>/<end>
 ################################################################
 
-@app.route("/api/v1.0/start/<start>")
-def get_temps_start(start ='2016-08-23'):
 
-     # Create session (link) from Python to the hawaii database
+# /api/v1.0/<start> 
+# Define what to do when a user hits the /api/v1.0/<start> route
+################################################################
+
+@app.route("/api/v1.0/<start>")
+def get_temps_start(start):
+
+    # Create session (link) from Python to the hawaii database
     session = Session(engine)
 
-    # Query the dates and temperature observations of the most-active station for the previous year
-    
-    results= session.query(measurement.date, measurement.prcp).\
-                    filter(measurement.date >= start).\
-                    order_by(measurement.date).all()
+    # Check the validity of the format and the date the user provided
 
+    try:
+        begin_dt = string_to_date(start) 
+    except Exception as e:
+        return ("Exception occurred for date entered: " + repr(e))
+
+
+    # Query the dates and temperature observations beginning with the given start date
+    # Calculate the minimum, maximum, and average temperature for this date range
+    
+    results= session.query(func.min(measurement.tobs),
+                           func.max(measurement.tobs),
+                           func.avg(measurement.tobs)).\
+                    filter(measurement.date >= start).all()
+    
     session.close()
 
     # Convert the query results from the temperature observations to a dictionary 
     # so json user has the field names available to query, not just the data.
   
-    #precip_list = list(np.ravel(results))
+    
+    if results: 
+        start_dates = [{'start_date': start, 'min_temp': result[0], 'max_temp': result[1], 'avg_temp': result[2]} for result in results]
+    else:
+         return jsonify('no results found', 404)
 
-    start_dates = [{'date': result[0], 'precipitation': result[1]} for result in results]
 
     # Return the JSON representation of the dictionary.
+
+    # The fields will not necessarily be returned in the order 
+    # they were added to dictionary.  Jsonify specification does not
+    # require a particular order
 
     return jsonify(start_dates)
 
 
 #####################################################################
-# Temperatures with user-entered  start and stop dates
+# Temperatures with user-entered start and stop dates
 # /api/v1.0/<start> and /api/v1.0/<start>/<end>
 # define what to do when a user hits the /api/v1.0/<start><end> route
 #
@@ -239,55 +287,52 @@ def get_temps_start(start ='2016-08-23'):
     # dates from the start date to the end date, inclusive.
 
 
-@app.route("/api/v1.0/start_end/<start>/<end>")
+@app.route("/api/v1.0/<start>/<end>")
 def get_temp_range(start, end):
 
     # Create session (link) from Python to the hawaii database
+
     session = Session(engine)
 
-    # Query the dates and temperature observations of the most-active station for the previous year
+    # check the validity of the start date the user entered
+    try:
+        date_entered = string_to_date(start) 
+    except Exception as e:
+        return ("Exception occurred for start date entered: " + repr(e))
     
-    results= session.query(measurement.date, measurement.prcp).\
-                    filter(and_(measurement.date >= start,
-                                measurement.date <= end)).\
-                    order_by(measurement.date).all()
+    # check the validity of the end date provided
+    try:
+        date_entered = string_to_date(end) 
+    except Exception as e:
+        return ("Exception occurred for end date entered: " + repr(e))
+
+    # Query the dates and temperature observations beginning with the given start date
+    # Calculate the minimum, maximum, and average temperature for this date range
+    
+    results= session.query(func.min(measurement.tobs),
+                           func.max(measurement.tobs),
+                           func.avg(measurement.tobs)).\
+                    filter(and_ (measurement.date >= start),
+                            (measurement.date <= end)).all()
 
     session.close()
 
-    # Convert the query results from the temperature observations to a dictionary 
-    # so json user has the field names available to query, not just the data.
+    # Convert the query results to a dictionary so the json user
+    # has the field names available to query, not just the data.
   
-    #precip_list = list(np.ravel(results))
-
-    start_end_dates = [{'date': result[0], 'precipitation': result[1]} for result in results]
+    if results: 
+        start_end_dates = [{'start_date': start,  'end_date': end, 'min_temp': result[0], 'max_temp': result[1], 'avg_temp': result[2]} for result in results]
+    else:
+         return jsonify('no results found', 404)
 
     # Return the JSON representation of the dictionary.
 
+    # The fields will not necessarily be returned in the order 
+    # they were added to the dictionary.  Jsonify does not
+    # provide a way to order the returned fields.
+
     return jsonify(start_end_dates)
 
-###############################################
-##def to_date(date_string): 
-    #try:
-        #return datetime.datetime.strptime(date_string, "%Y-%m-%d").date()
-    #except ValueError:
-       # raise ValueError('{} is not valid date in the format YYYY-MM-DD'.format(date_string))
-
-#@app.route()
-#def event():
-    #try:
-    #    ektempo = to_date(request.args.get('start', default = datetime.date.today().isoformat()))
-    #except ValueError as ex:
-       # return jsonify({'error': str(ex)}), 400   # jsonify, if this is a json api
-
-# Use of <converter: variable name> in the
-# route() decorator.
-#@app.route('/allow/<int:Number>')
-#def allow(Number):
-   # if Number < 25:
-    #    return f'You have been allowed to enter because your number is {str(Number)}'
-    #else:
-    #   return f'You are not allowed'
- 
 
 ###################################################
 # Main driver function:  call flask run() on local server
