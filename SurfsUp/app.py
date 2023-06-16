@@ -55,6 +55,11 @@ prior_year_date = '2016-08-23'
 # Functino to check validity of user input dates
 ################################################
 
+# check the date entered and raise an exception if invalid.
+# The exception is returned to the calling
+# route, for it to handle by returning a json object showing the erorr or otherwise
+# as it sees fit, rather than printing the error here to a terminal or log.
+
 def string_to_date(date_str): 
     try:
         return datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -101,7 +106,7 @@ def home():
 def precipitation():
 
     # Create and close the db session with each API route call.  This
-    # may be a little slower in user response, but ensures that the server
+    # may be a little slower in user response time, but ensures that the server
     # does not get swamped with unused sessions as someone sits on
     # a web page result, and also ensures that the session is
     # valid and has not timed out or gotten disconnected or corrupted 
@@ -126,6 +131,7 @@ def precipitation():
   
     #precip_list = list(np.ravel(results))
 
+    # test if there was a valid response or otherwise return json showing error
     if results:
         precip_dict = [{'date': result[0], 'precipitation': result[1]} for result in results]
     else:
@@ -151,7 +157,7 @@ def precipitation():
 @app.route("/api/v1.0/stations")
 def get_stations():
 
-     # Create the session (link) from Python to the hawaii database
+     # Create the session from Python to the hawaii database
     session = Session(engine)
 
     # Query the station table in the database
@@ -161,6 +167,8 @@ def get_stations():
 
     # Create a stations dictionary so the end user of the json 
     # has the field names to work with, not just the data.
+    # check if results were not returned, just return a
+    # json containing the error message to the user
 
     if results:
         stations_list = [{'station': result[0], 'name': result[1], 'latitude': result[2], 'longitude': result[3], 'elevation': result[4]} for result in results]
@@ -182,7 +190,7 @@ def get_stations():
 @app.route("/api/v1.0/tobs")
 def get_temps():
 
-    # Create session (link) from Python to the hawaii database
+    # Create sessionfrom Python to the hawaii database
     session = Session(engine)
 
     # Query the dates and temperature observations of the most-active station for the previous year
@@ -196,6 +204,8 @@ def get_temps():
 
     # Convert the query results from the temperature observations to a dictionary 
     # so json user has the field names available to query, not just the data.
+    # Only parse through the results if a valid response was received, otherwise
+    # return an error message.
   
     if results:
          active_station_temps= [{'date': result[0], 'temperature': result[1]} for result in results]
@@ -209,8 +219,10 @@ def get_temps():
 
 
 ################################################################
-# Temperature calcs with user-entered start or start-stop dates
-#  /api/v1.0/<start> and /api/v1.0/<start>/<end>
+# The following routes use dynamic user input in the db queries
+# to query temperature data with user-entered range dates.
+# All date range queries are inclusive of start and end dates
+#       
 ################################################################
 
 
@@ -221,13 +233,15 @@ def get_temps():
 @app.route("/api/v1.0/<start>")
 def get_temps_start(start):
 
-    # Create session (link) from Python to the hawaii database
+    # Create session from Python to the hawaii database
     session = Session(engine)
 
     # Check the validity of the format and the date the user provided
+    # the method of printing the content of the exception (e) to the 
+    # return string is a combination of Stack Overflow entries and
 
     try:
-        begin_dt = string_to_date(start) 
+        starting_date = string_to_date(start) 
     except Exception as e:
         return ("Exception occurred for date entered: " + repr(e))
 
@@ -244,7 +258,7 @@ def get_temps_start(start):
 
     # Convert the query results from the temperature observations to a dictionary 
     # so json user has the field names available to query, not just the data.
-  
+    # if no valid results were returned from the database, return that error to user.
     
     if results: 
         start_dates = [{'start_date': start, 'min_temp': result[0], 'max_temp': result[1], 'avg_temp': result[2]} for result in results]
@@ -267,24 +281,6 @@ def get_temps_start(start):
 # define what to do when a user hits the /api/v1.0/<start><end> route
 #
 #####################################################################
-    #Return a JSON list of the minimum temperature, the average temperature, and the 
-    #maximum temperature for a specified start or start-end range.
-
-    #For a specified start, calculate TMIN, TAVG, and TMAX for all the dates greater than 
-    # or equal to the start date.
-
-    #For a specified start date and end date, calculate TMIN, TAVG, and TMAX for the 
-    # dates from the start date to the end date, inclusive.
-
-
-    #Return a JSON list of the minimum temperature, the average temperature, and the 
-    #maximum temperature for a specified start or start-end range.
-
-    #For a specified start, calculate TMIN, TAVG, and TMAX for all the dates greater than 
-    # or equal to the start date.
-
-    #For a specified start date and end date, calculate TMIN, TAVG, and TMAX for the 
-    # dates from the start date to the end date, inclusive.
 
 
 @app.route("/api/v1.0/<start>/<end>")
@@ -295,14 +291,16 @@ def get_temp_range(start, end):
     session = Session(engine)
 
     # check the validity of the start date the user entered
+    # use slack overflow multiple responses combined on printing
+    # content of any error.
     try:
-        date_entered = string_to_date(start) 
+        date_to_begin = string_to_date(start) 
     except Exception as e:
         return ("Exception occurred for start date entered: " + repr(e))
     
     # check the validity of the end date provided
     try:
-        date_entered = string_to_date(end) 
+        date_to_end = string_to_date(end) 
     except Exception as e:
         return ("Exception occurred for end date entered: " + repr(e))
 
@@ -319,6 +317,7 @@ def get_temp_range(start, end):
 
     # Convert the query results to a dictionary so the json user
     # has the field names available to query, not just the data.
+    # if no valid response was returned, return a json saying content unavailable
   
     if results: 
         start_end_dates = [{'start_date': start,  'end_date': end, 'min_temp': result[0], 'max_temp': result[1], 'avg_temp': result[2]} for result in results]
@@ -335,7 +334,7 @@ def get_temp_range(start, end):
 
 
 ###################################################
-# Main driver function:  call flask run() on local server
+# Main driver:  call flask run() on local server
 ##################################################
 
 if __name__ == "__main__":
